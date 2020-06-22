@@ -66,24 +66,9 @@ echo now, perform update installation and run this script again.
 echo.
 choice /c yn /n /m "Continue [Y,N]?"
 if %ERRORLEVEL% == 2 goto exit
-echo.
 
-REM Create disk cleanup task
-REM
-REM NOTE:
-REM - this sets the same registry values that would be set by GUI-based
-REM   'cleanmgr.exe /sageset:<task-num>'
-REM - using 'reg query' to check existence of keys to prevent creation of 
-REM   non-existent keys (some keys are exclusive to Windows 8, some keys
-REM   are exclusive to Windows 10)
-REM - untested alternative (source: https://stackoverflow.com/a/51162985):
-REM   'cleanmgr.exe /verylowdisk /autoclean'
-REM - To automatically generate lines below, use:
-REM   for /f "delims=" %%f in ('reg query "%DSKCLN_REG%" ^| sort') do echo reg query "%%DSKCLN_REG%%\%%~nf" ^>NUL 2^>^&1 ^&^& reg add "%%DSKCLN_REG%%\%%~nf" /v "StateFlags%%DSKCLN_TASK%%" /d 2 /t REG_DWORD /f ^>NUL 2^>^&1
-REM
-REM Source: 
-REM https://stealthpuppy.com/cleaning-up-and-reducing-the-size-of-your-master-image/
-REM
+REM Create disk cleanup task (same as GUI-based 'cleanmgr.exe /sageset:n')
+echo.
 echo Creating disk cleanup task...
 reg query "%DSKCLN_REG%\Active Setup Temp Folders" >NUL 2>&1 && reg add "%DSKCLN_REG%\Active Setup Temp Folders" /v "StateFlags%DSKCLN_TASK%" /d 2 /t REG_DWORD /f >NUL 2>&1
 reg query "%DSKCLN_REG%\BranchCache" >NUL 2>&1 && reg add "%DSKCLN_REG%\BranchCache" /v "StateFlags%DSKCLN_TASK%" /d 2 /t REG_DWORD /f >NUL 2>&1
@@ -130,11 +115,6 @@ echo Running disk cleanup task...
 start /wait "" "%DSKCLN_EXEC%" /sagerun:%DSKCLN_TASK%
 
 REM Remove disk cleanup task
-REM
-REM NOTE:
-REM To automatically generate lines below, use:
-REM for /f "delims=" %%f in ('reg query "%DSKCLN_REG%" ^| sort') do echo reg delete "%%DSKCLN_REG%%\%%~nf" /v "StateFlags%%DSKCLN_TASK%%" /f ^>NUL 2^>^&1
-REM
 echo Removing disk cleanup task...
 reg delete "%DSKCLN_REG%\Active Setup Temp Folders" /v "StateFlags%DSKCLN_TASK%" /f >NUL 2>&1
 reg delete "%DSKCLN_REG%\BranchCache" /v "StateFlags%DSKCLN_TASK%" /f >NUL 2>&1
@@ -177,24 +157,14 @@ reg delete "%DSKCLN_REG%\Windows Error Reporting System Queue Files" /v "StateFl
 reg delete "%DSKCLN_REG%\Windows Upgrade Log Files" /v "StateFlags%DSKCLN_TASK%" /f >NUL 2>&1
 
 REM Run DISM for in-depth cleanup of WinSxS folder to free additional space
-REM
-REM Source:
-REM https://stealthpuppy.com/cleaning-up-and-reducing-the-size-of-your-master-image/
-REM
 echo.
 echo Performing in-depth cleanup of WinSxS folder...
 "%DISM_EXEC%" /Online /Cleanup-Image /StartComponentCleanup /ResetBase
 
 REM Run drive optimizer to defragment used space and consolidate free space
 REM ('/d' == normal defragmentation, '/h' == normal process priority instead
-REM of low, '/u' == display progress)
-REM
-REM NOTE:
-REM Previously, we used switch '/c' (process all available volumes), but for
-REM some reason this would skip the system drive. Thus, using wmic + for-loop
-REM instead. Also, we used to have two separate runs, one with '/d' and one
-REM with '/x', but testing showed that '/d' includes consolidating free space
-REM
+REM of low, '/u' == display progress; not using '/c' == process all available
+REM volumes, for some reason this will skip the system drive)
 echo.
 echo Defragmenting disks...
 for /f "skip=1 tokens=1" %%d in ('wmic logicaldisk where "DriveType=3" get deviceid 2^>NUL ^| findstr /r /v "^$"') do (
@@ -202,16 +172,6 @@ for /f "skip=1 tokens=1" %%d in ('wmic logicaldisk where "DriveType=3" get devic
 )
 
 REM Run sdelete to zero free space
-REM
-REM NOTE:
-REM As sdelete does not have an option to process all available disks, we use
-REM wmic to determine all local disks + for-loop to process them
-REM
-REM Sources:
-REM http://support.moonpoint.com/os/windows/commands/wmic/logicaldisk.php
-REM https://superuser.com/a/1192171
-REM https://superuser.com/a/1082547
-REM
 echo.
 echo Zeroing free space...
 for /f "skip=1 tokens=1" %%d in ('wmic logicaldisk where "DriveType=3" get deviceid 2^>NUL ^| findstr /r /v "^$"') do (
